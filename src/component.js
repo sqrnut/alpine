@@ -11,7 +11,7 @@ import { unwrap, wrap } from './observable'
 import Alpine from './index'
 
 export default class Component {
-    constructor(el, componentForClone = null) {
+    constructor(el, componentForClone = null, shallowClone = false) {
         this.$el = el
 
         const dataAttr = this.$el.getAttribute('x-data')
@@ -94,7 +94,11 @@ export default class Component {
         }
 
         // Register all our listeners and set all our attribute bindings.
-        this.initializeElements(this.$el)
+        if ( shallowClone ) {
+          this.initializeElementsShallowClone( this.$el ); // Use mutation observer to detect new elements being added within this component at run-time.
+        } else {
+          this.initializeElements( this.$el ); // Use mutation observer to detect new elements being added within this component at run-time.
+        }
 
         // Use mutation observer to detect new elements being added within this component at run-time.
         // Alpine's just so darn flexible amirite?
@@ -177,8 +181,25 @@ export default class Component {
         })
     }
 
-    walkAndSkipNestedComponents(el, callback, initializeComponentCallback = () => {}) {
-        walk(el, el => {
+    walkAndSkipNestedComponentsShallowClone(rootEl, callback, initializeComponentCallback = () => {}) {
+      walk(rootEl, el => {
+        // We've hit a component.
+        if (el.hasAttribute('x-data')) {
+          // If it's not the current one.
+          if (!el.isSameNode(this.$el)) {
+            // Initialize it if it's not.
+            if ( el === rootEl && !el.__x) initializeComponentCallback(el); // Now we'll let that sub-component deal with itself.
+
+            return false;
+          }
+        }
+
+        return callback(el);
+      });
+    }
+
+    walkAndSkipNestedComponents(rootEl, callback, initializeComponentCallback = () => {}) {
+        walk(rootEl, el => {
             // We've hit a component.
             if (el.hasAttribute('x-data')) {
                 // If it's not the current one.
@@ -193,6 +214,21 @@ export default class Component {
 
             return callback(el)
         })
+    }
+
+    initializeElementsShallowClone(rootEl, extraVars = () => {}) {
+      this.walkAndSkipNestedComponentsShallowClone(rootEl, el => {
+        // Don't touch spawns from for loop
+        if (el.__x_for_key !== undefined) return false; // Don't touch spawns from if directives
+
+        if (el.__x_inserted_me !== undefined) return false;
+
+        this.initializeElement(el, extraVars);
+      }, el => {
+        el.__x = new Component(el, null, true);
+      });
+      this.executeAndClearRemainingShowDirectiveStack();
+      this.executeAndClearNextTickStack(rootEl);
     }
 
     initializeElements(rootEl, extraVars = () => {}) {

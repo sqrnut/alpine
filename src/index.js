@@ -99,9 +99,9 @@ const Alpine = {
         }
     },
 
-    clone: function (component, newEl) {
-        if (! newEl.__x) {
-            newEl.__x = new Component(newEl, component)
+    clone: function clone(component, newEl, shallowClone = false) {
+        if (!newEl.__x) {
+            newEl.__x = new Component(newEl, component, shallowClone);
         }
     },
 

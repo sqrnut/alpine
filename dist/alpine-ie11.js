@@ -6387,7 +6387,7 @@
     var forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/;
     var stripParensRE = /^\(|\)$/g;
     var forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/;
-    var inMatch = expression.match(forAliasRE);
+    var inMatch = String(expression).match(forAliasRE);
     if (!inMatch) return;
     var res = {};
     res.items = inMatch[2].trim();
@@ -6512,7 +6512,7 @@
     if (attrName === 'value') {
       if (Alpine.ignoreFocusedForValueBinding && document.activeElement.isSameNode(el)) return; // If nested model key is undefined, set the default value to empty string.
 
-      if (value === undefined && expression.match(/\./)) {
+      if (value === undefined && String(expression).match(/\./)) {
         value = '';
       }
 
@@ -6622,7 +6622,7 @@
 
   function handleTextDirective(el, output, expression) {
     // If nested model key is undefined, set the default value to empty string.
-    if (output === undefined && expression.match(/\./)) {
+    if (output === undefined && String(expression).match(/\./)) {
       output = '';
     }
 
@@ -7156,6 +7156,7 @@
       var _this = this;
 
       var componentForClone = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
+      var shallowClone = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
 
       _classCallCheck(this, Component);
 
@@ -7253,8 +7254,13 @@
       } // Register all our listeners and set all our attribute bindings.
 
 
-      this.initializeElements(this.$el); // Use mutation observer to detect new elements being added within this component at run-time.
+      if (shallowClone) {
+        this.initializeElementsShallowClone(this.$el); // Use mutation observer to detect new elements being added within this component at run-time.
+      } else {
+        this.initializeElements(this.$el); // Use mutation observer to detect new elements being added within this component at run-time.
+      } // Use mutation observer to detect new elements being added within this component at run-time.
       // Alpine's just so darn flexible amirite?
+
 
       this.listenForNewElementsToInitialize();
 
@@ -7374,15 +7380,40 @@
         }.bind(this));
       }
     }, {
-      key: "walkAndSkipNestedComponents",
-      value: function walkAndSkipNestedComponents(el, callback) {
+      key: "walkAndSkipNestedComponentsShallowClone",
+      value: function walkAndSkipNestedComponentsShallowClone(rootEl, callback) {
         var _this9 = this;
 
         var initializeComponentCallback = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : function () {
           _newArrowCheck(this, _this9);
         }.bind(this);
-        walk(el, function (el) {
+        walk(rootEl, function (el) {
           _newArrowCheck(this, _this9);
+
+          // We've hit a component.
+          if (el.hasAttribute('x-data')) {
+            // If it's not the current one.
+            if (!el.isSameNode(this.$el)) {
+              // Initialize it if it's not.
+              if (el === rootEl && !el.__x) initializeComponentCallback(el); // Now we'll let that sub-component deal with itself.
+
+              return false;
+            }
+          }
+
+          return callback(el);
+        }.bind(this));
+      }
+    }, {
+      key: "walkAndSkipNestedComponents",
+      value: function walkAndSkipNestedComponents(rootEl, callback) {
+        var _this10 = this;
+
+        var initializeComponentCallback = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : function () {
+          _newArrowCheck(this, _this10);
+        }.bind(this);
+        walk(rootEl, function (el) {
+          _newArrowCheck(this, _this10);
 
           // We've hit a component.
           if (el.hasAttribute('x-data')) {
@@ -7399,15 +7430,15 @@
         }.bind(this));
       }
     }, {
-      key: "initializeElements",
-      value: function initializeElements(rootEl) {
-        var _this10 = this;
+      key: "initializeElementsShallowClone",
+      value: function initializeElementsShallowClone(rootEl) {
+        var _this11 = this;
 
         var extraVars = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : function () {
-          _newArrowCheck(this, _this10);
+          _newArrowCheck(this, _this11);
         }.bind(this);
-        this.walkAndSkipNestedComponents(rootEl, function (el) {
-          _newArrowCheck(this, _this10);
+        this.walkAndSkipNestedComponentsShallowClone(rootEl, function (el) {
+          _newArrowCheck(this, _this11);
 
           // Don't touch spawns from for loop
           if (el.__x_for_key !== undefined) return false; // Don't touch spawns from if directives
@@ -7415,7 +7446,31 @@
           if (el.__x_inserted_me !== undefined) return false;
           this.initializeElement(el, extraVars);
         }.bind(this), function (el) {
-          _newArrowCheck(this, _this10);
+          _newArrowCheck(this, _this11);
+
+          el.__x = new Component(el, null, true);
+        }.bind(this));
+        this.executeAndClearRemainingShowDirectiveStack();
+        this.executeAndClearNextTickStack(rootEl);
+      }
+    }, {
+      key: "initializeElements",
+      value: function initializeElements(rootEl) {
+        var _this12 = this;
+
+        var extraVars = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : function () {
+          _newArrowCheck(this, _this12);
+        }.bind(this);
+        this.walkAndSkipNestedComponents(rootEl, function (el) {
+          _newArrowCheck(this, _this12);
+
+          // Don't touch spawns from for loop
+          if (el.__x_for_key !== undefined) return false; // Don't touch spawns from if directives
+
+          if (el.__x_inserted_me !== undefined) return false;
+          this.initializeElement(el, extraVars);
+        }.bind(this), function (el) {
+          _newArrowCheck(this, _this12);
 
           el.__x = new Component(el);
         }.bind(this));
@@ -7437,19 +7492,19 @@
     }, {
       key: "updateElements",
       value: function updateElements(rootEl) {
-        var _this11 = this;
+        var _this13 = this;
 
         var extraVars = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : function () {
-          _newArrowCheck(this, _this11);
+          _newArrowCheck(this, _this13);
         }.bind(this);
         this.walkAndSkipNestedComponents(rootEl, function (el) {
-          _newArrowCheck(this, _this11);
+          _newArrowCheck(this, _this13);
 
           // Don't touch spawns from for loop (and check if the root is actually a for loop in a parent, don't skip it.)
           if (el.__x_for_key !== undefined && !el.isSameNode(this.$el)) return false;
           this.updateElement(el, extraVars);
         }.bind(this), function (el) {
-          _newArrowCheck(this, _this11);
+          _newArrowCheck(this, _this13);
 
           el.__x = new Component(el);
         }.bind(this));
@@ -7459,14 +7514,14 @@
     }, {
       key: "executeAndClearNextTickStack",
       value: function executeAndClearNextTickStack(el) {
-        var _this12 = this;
+        var _this14 = this;
 
         // Skip spawns from alpine directives
         if (el === this.$el && this.nextTickStack.length > 0) {
           // We run the tick stack after the next frame to allow any
           // running transitions to pass the initial show stage.
           requestAnimationFrame(function () {
-            _newArrowCheck(this, _this12);
+            _newArrowCheck(this, _this14);
 
             while (this.nextTickStack.length > 0) {
               this.nextTickStack.shift()();
@@ -7477,41 +7532,41 @@
     }, {
       key: "executeAndClearRemainingShowDirectiveStack",
       value: function executeAndClearRemainingShowDirectiveStack() {
-        var _this13 = this;
+        var _this15 = this;
 
         // The goal here is to start all the x-show transitions
         // and build a nested promise chain so that elements
         // only hide when the children are finished hiding.
         this.showDirectiveStack.reverse().map(function (handler) {
-          var _this14 = this;
+          var _this16 = this;
 
-          _newArrowCheck(this, _this13);
+          _newArrowCheck(this, _this15);
 
           return new Promise(function (resolve, reject) {
-            _newArrowCheck(this, _this14);
+            _newArrowCheck(this, _this16);
 
             handler(resolve, reject);
           }.bind(this));
         }.bind(this)).reduce(function (promiseChain, promise) {
-          var _this15 = this;
+          var _this17 = this;
 
-          _newArrowCheck(this, _this13);
+          _newArrowCheck(this, _this15);
 
           return promiseChain.then(function () {
-            var _this16 = this;
+            var _this18 = this;
 
-            _newArrowCheck(this, _this15);
+            _newArrowCheck(this, _this17);
 
             return promise.then(function (finishElement) {
-              _newArrowCheck(this, _this16);
+              _newArrowCheck(this, _this18);
 
               finishElement();
             }.bind(this));
           }.bind(this));
         }.bind(this), Promise.resolve(function () {
-          _newArrowCheck(this, _this13);
+          _newArrowCheck(this, _this15);
         }.bind(this)))["catch"](function (e) {
-          _newArrowCheck(this, _this13);
+          _newArrowCheck(this, _this15);
 
           if (e !== TRANSITION_CANCELLED) throw e;
         }.bind(this)); // We've processed the handler stack. let's clear it.
@@ -7527,10 +7582,10 @@
     }, {
       key: "registerListeners",
       value: function registerListeners(el, extraVars) {
-        var _this17 = this;
+        var _this19 = this;
 
         getXAttrs(el, this).forEach(function (_ref5) {
-          _newArrowCheck(this, _this17);
+          _newArrowCheck(this, _this19);
 
           var type = _ref5.type,
               value = _ref5.value,
@@ -7551,15 +7606,15 @@
     }, {
       key: "resolveBoundAttributes",
       value: function resolveBoundAttributes(el) {
-        var _this18 = this;
+        var _this20 = this;
 
         var initialUpdate = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
         var extraVars = arguments.length > 2 ? arguments[2] : undefined;
         var attrs = getXAttrs(el, this);
         attrs.forEach(function (_ref6) {
-          var _this19 = this;
+          var _this21 = this;
 
-          _newArrowCheck(this, _this18);
+          _newArrowCheck(this, _this20);
 
           var type = _ref6.type,
               value = _ref6.value,
@@ -7595,7 +7650,7 @@
               // If this element also has x-for on it, don't process x-if.
               // We will let the "x-for" directive handle the "if"ing.
               if (attrs.some(function (i) {
-                _newArrowCheck(this, _this19);
+                _newArrowCheck(this, _this21);
 
                 return i.type === 'for';
               }.bind(this))) return;
@@ -7616,10 +7671,10 @@
     }, {
       key: "evaluateReturnExpression",
       value: function evaluateReturnExpression(el, expression) {
-        var _this20 = this;
+        var _this22 = this;
 
         var extraVars = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : function () {
-          _newArrowCheck(this, _this20);
+          _newArrowCheck(this, _this22);
         }.bind(this);
         return saferEval(el, expression, this.$data, _objectSpread2(_objectSpread2({}, extraVars()), {}, {
           $dispatch: this.getDispatchFunction(el)
@@ -7628,10 +7683,10 @@
     }, {
       key: "evaluateCommandExpression",
       value: function evaluateCommandExpression(el, expression) {
-        var _this21 = this;
+        var _this23 = this;
 
         var extraVars = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : function () {
-          _newArrowCheck(this, _this21);
+          _newArrowCheck(this, _this23);
         }.bind(this);
         return saferEvalNoReturn(el, expression, this.$data, _objectSpread2(_objectSpread2({}, extraVars()), {}, {
           $dispatch: this.getDispatchFunction(el)
@@ -7651,7 +7706,7 @@
     }, {
       key: "listenForNewElementsToInitialize",
       value: function listenForNewElementsToInitialize() {
-        var _this22 = this;
+        var _this24 = this;
 
         var targetNode = this.$el;
         var observerOptions = {
@@ -7660,9 +7715,9 @@
           subtree: true
         };
         var observer = new MutationObserver(function (mutations) {
-          var _this23 = this;
+          var _this25 = this;
 
-          _newArrowCheck(this, _this22);
+          _newArrowCheck(this, _this24);
 
           for (var i = 0; i < mutations.length; i++) {
             // Filter out mutations triggered from child components.
@@ -7671,17 +7726,17 @@
 
             if (mutations[i].type === 'attributes' && mutations[i].attributeName === 'x-data') {
               (function () {
-                var _this24 = this;
+                var _this26 = this;
 
                 var xAttr = mutations[i].target.getAttribute('x-data') || '{}';
-                var rawData = saferEval(_this23.$el, xAttr, {
-                  $el: _this23.$el
+                var rawData = saferEval(_this25.$el, xAttr, {
+                  $el: _this25.$el
                 });
                 Object.keys(rawData).forEach(function (key) {
-                  _newArrowCheck(this, _this24);
+                  _newArrowCheck(this, _this26);
 
-                  if (_this23.$data[key] !== rawData[key]) {
-                    _this23.$data[key] = rawData[key];
+                  if (_this25.$data[key] !== rawData[key]) {
+                    _this25.$data[key] = rawData[key];
                   }
                 }.bind(this));
               })();
@@ -7689,7 +7744,7 @@
 
             if (mutations[i].addedNodes.length > 0) {
               mutations[i].addedNodes.forEach(function (node) {
-                _newArrowCheck(this, _this23);
+                _newArrowCheck(this, _this25);
 
                 if (node.nodeType !== 1 || node.__x_inserted_me) return;
 
@@ -7708,7 +7763,7 @@
     }, {
       key: "getRefsProxy",
       value: function getRefsProxy() {
-        var _this25 = this;
+        var _this27 = this;
 
         var self = this;
         var refObj = {};
@@ -7720,7 +7775,7 @@
         // we just loop on the element, look for any x-ref and create a tmp property on a fake object.
 
         this.walkAndSkipNestedComponents(self.$el, function (el) {
-          _newArrowCheck(this, _this25);
+          _newArrowCheck(this, _this27);
 
           if (el.hasAttribute('x-ref')) {
             refObj[el.getAttribute('x-ref')] = true;
@@ -7734,14 +7789,14 @@
 
         return new Proxy(refObj, {
           get: function get(object, property) {
-            var _this26 = this;
+            var _this28 = this;
 
             if (property === '$isAlpineProxy') return true;
             var ref; // We can't just query the DOM because it's hard to filter out refs in
             // nested components.
 
             self.walkAndSkipNestedComponents(self.$el, function (el) {
-              _newArrowCheck(this, _this26);
+              _newArrowCheck(this, _this28);
 
               if (el.hasAttribute('x-ref') && el.getAttribute('x-ref') === property) {
                 ref = el;
@@ -7896,8 +7951,10 @@
       }
     },
     clone: function clone(component, newEl) {
+      var shallowClone = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+
       if (!newEl.__x) {
-        newEl.__x = new Component(newEl, component);
+        newEl.__x = new Component(newEl, component, shallowClone);
       }
     },
     addMagicProperty: function addMagicProperty(name, callback) {

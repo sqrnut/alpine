@@ -574,7 +574,7 @@
     let forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/;
     let stripParensRE = /^\(|\)$/g;
     let forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/;
-    let inMatch = expression.match(forAliasRE);
+    let inMatch = String(expression).match(forAliasRE);
     if (!inMatch) return;
     let res = {};
     res.items = inMatch[2].trim();
@@ -671,7 +671,7 @@
     if (attrName === 'value') {
       if (Alpine.ignoreFocusedForValueBinding && document.activeElement.isSameNode(el)) return; // If nested model key is undefined, set the default value to empty string.
 
-      if (value === undefined && expression.match(/\./)) {
+      if (value === undefined && String(expression).match(/\./)) {
         value = '';
       }
 
@@ -754,7 +754,7 @@
 
   function handleTextDirective(el, output, expression) {
     // If nested model key is undefined, set the default value to empty string.
-    if (output === undefined && expression.match(/\./)) {
+    if (output === undefined && String(expression).match(/\./)) {
       output = '';
     }
 
@@ -1437,7 +1437,7 @@
   }
 
   class Component {
-    constructor(el, componentForClone = null) {
+    constructor(el, componentForClone = null, shallowClone = false) {
       this.$el = el;
       const dataAttr = this.$el.getAttribute('x-data');
       const dataExpression = dataAttr === '' ? '{}' : dataAttr;
@@ -1507,8 +1507,13 @@
       } // Register all our listeners and set all our attribute bindings.
 
 
-      this.initializeElements(this.$el); // Use mutation observer to detect new elements being added within this component at run-time.
+      if (shallowClone) {
+        this.initializeElementsShallowClone(this.$el); // Use mutation observer to detect new elements being added within this component at run-time.
+      } else {
+        this.initializeElements(this.$el); // Use mutation observer to detect new elements being added within this component at run-time.
+      } // Use mutation observer to detect new elements being added within this component at run-time.
       // Alpine's just so darn flexible amirite?
+
 
       this.listenForNewElementsToInitialize();
 
@@ -1579,8 +1584,25 @@
       });
     }
 
-    walkAndSkipNestedComponents(el, callback, initializeComponentCallback = () => {}) {
-      walk(el, el => {
+    walkAndSkipNestedComponentsShallowClone(rootEl, callback, initializeComponentCallback = () => {}) {
+      walk(rootEl, el => {
+        // We've hit a component.
+        if (el.hasAttribute('x-data')) {
+          // If it's not the current one.
+          if (!el.isSameNode(this.$el)) {
+            // Initialize it if it's not.
+            if (el === rootEl && !el.__x) initializeComponentCallback(el); // Now we'll let that sub-component deal with itself.
+
+            return false;
+          }
+        }
+
+        return callback(el);
+      });
+    }
+
+    walkAndSkipNestedComponents(rootEl, callback, initializeComponentCallback = () => {}) {
+      walk(rootEl, el => {
         // We've hit a component.
         if (el.hasAttribute('x-data')) {
           // If it's not the current one.
@@ -1594,6 +1616,20 @@
 
         return callback(el);
       });
+    }
+
+    initializeElementsShallowClone(rootEl, extraVars = () => {}) {
+      this.walkAndSkipNestedComponentsShallowClone(rootEl, el => {
+        // Don't touch spawns from for loop
+        if (el.__x_for_key !== undefined) return false; // Don't touch spawns from if directives
+
+        if (el.__x_inserted_me !== undefined) return false;
+        this.initializeElement(el, extraVars);
+      }, el => {
+        el.__x = new Component(el, null, true);
+      });
+      this.executeAndClearRemainingShowDirectiveStack();
+      this.executeAndClearNextTickStack(rootEl);
     }
 
     initializeElements(rootEl, extraVars = () => {}) {
@@ -1909,9 +1945,9 @@
         }
       }
     },
-    clone: function clone(component, newEl) {
+    clone: function clone(component, newEl, shallowClone = false) {
       if (!newEl.__x) {
-        newEl.__x = new Component(newEl, component);
+        newEl.__x = new Component(newEl, component, shallowClone);
       }
     },
     addMagicProperty: function addMagicProperty(name, callback) {
